@@ -1,0 +1,45 @@
+-- Variável global para guardar o highlight
+local rakeHighlight = nil
+
+-- Função do toggle (liga/desliga)
+local function toggleRakeESP()
+    espRakeEnabled = not espRakeEnabled
+    btnRakeESP.Text = "ESP Rake: " .. (espRakeEnabled and "ON" or "OFF")
+
+    if espRakeEnabled then
+        -- Tenta achar o Rake atual
+        local rake = workspace:FindFirstChild("Rake") or workspace:FindFirstChild("RDummy")
+        if rake then
+            if not rakeHighlight then
+                rakeHighlight = Instance.new("Highlight")
+                rakeHighlight.Name = "ESPChamHighlight"
+                rakeHighlight.FillColor = Color3.fromRGB(255, 0, 0)
+                rakeHighlight.OutlineColor = Color3.fromRGB(255, 0, 0)
+                rakeHighlight.FillTransparency = 0.4
+                rakeHighlight.OutlineTransparency = 0
+                rakeHighlight.Adornee = rake
+                rakeHighlight.Parent = rake
+            end
+        end
+
+        -- Detecta novos Rake se aparecerem depois
+        workspace.ChildAdded:Connect(function(child)
+            if (child.Name == "Rake" or child.Name == "RDummy") and espRakeEnabled then
+                if rakeHighlight then rakeHighlight:Destroy() end
+                rakeHighlight = Instance.new("Highlight")
+                rakeHighlight.Name = "ESPChamHighlight"
+                rakeHighlight.FillColor = Color3.fromRGB(255, 0, 0)
+                rakeHighlight.OutlineColor = Color3.fromRGB(255, 0, 0)
+                rakeHighlight.FillTransparency = 0.4
+                rakeHighlight.OutlineTransparency = 0
+                rakeHighlight.Adornee = child
+                rakeHighlight.Parent = child
+            end
+        end)
+    else
+        if rakeHighlight then
+            rakeHighlight:Destroy()
+            rakeHighlight = nil
+        end
+    end
+end
