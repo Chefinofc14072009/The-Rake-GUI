@@ -1,45 +1,301 @@
--- Variável global para guardar o highlight
-local rakeHighlight = nil
+-- Carregar Biblioteca
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 
--- Função do toggle (liga/desliga)
-local function toggleRakeESP()
-    espRakeEnabled = not espRakeEnabled
-    btnRakeESP.Text = "ESP Rake: " .. (espRakeEnabled and "ON" or "OFF")
+-- Janela principal
+local Window = Fluent:CreateWindow({
+    Title = "The Rake Remastered - by Chefin" .. Fluent.Version,
+    TabWidth = 160, 
+    Size = UDim2.fromOffset(580, 460),
+    Theme = "Dark"
+})
+    
+    -- Aba
+local Tabs = {
+    Main = Window:AddTab({ Title = "Scripts" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
+}
 
-    if espRakeEnabled then
-        -- Tenta achar o Rake atual
-        local rake = workspace:FindFirstChild("Rake") or workspace:FindFirstChild("RDummy")
-        if rake then
-            if not rakeHighlight then
-                rakeHighlight = Instance.new("Highlight")
-                rakeHighlight.Name = "ESPChamHighlight"
-                rakeHighlight.FillColor = Color3.fromRGB(255, 0, 0)
-                rakeHighlight.OutlineColor = Color3.fromRGB(255, 0, 0)
-                rakeHighlight.FillTransparency = 0.4
-                rakeHighlight.OutlineTransparency = 0
-                rakeHighlight.Adornee = rake
-                rakeHighlight.Parent = rake
-            end
-        end
+-- Parágrafo
+Tabs.Main:AddParagraph({ Title = "Ative Scripts!", Content = "Ative Scripts Abaixo" })
 
-        -- Detecta novos Rake se aparecerem depois
-        workspace.ChildAdded:Connect(function(child)
-            if (child.Name == "Rake" or child.Name == "RDummy") and espRakeEnabled then
-                if rakeHighlight then rakeHighlight:Destroy() end
-                rakeHighlight = Instance.new("Highlight")
-                rakeHighlight.Name = "ESPChamHighlight"
-                rakeHighlight.FillColor = Color3.fromRGB(255, 0, 0)
-                rakeHighlight.OutlineColor = Color3.fromRGB(255, 0, 0)
-                rakeHighlight.FillTransparency = 0.4
-                rakeHighlight.OutlineTransparency = 0
-                rakeHighlight.Adornee = child
-                rakeHighlight.Parent = child
-            end
-        end)
-    else
-        if rakeHighlight then
-            rakeHighlight:Destroy()
-            rakeHighlight = nil
-        end
+-- Variáveis de controle
+local espAtivo = false
+local highlights = {}
+
+-- Função para criar ESP em um jogador
+local function aplicarESP(player)
+    if player == game.Players.LocalPlayer then return end -- Ignora o próprio jogador
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+
+    -- Evita duplicar ESP
+    if player.Character:FindFirstChild("ESP_Player") then return end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "ESP_Player"
+    highlight.FillColor = Color3.fromRGB(0, 170, 255)
+    highlight.OutlineColor = Color3.fromRGB(0, 170, 255)
+    highlight.FillTransparency = 0.25
+    highlight.OutlineTransparency = 0
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.Adornee = player.Character
+    highlight.Parent = player.Character
+
+    highlights[player] = highlight
+end
+
+-- Função para remover ESP de um jogador
+local function removerESP(player)
+    local char = player.Character
+    if char and char:FindFirstChild("ESP_Player") then
+        char.ESP_Player:Destroy()
+    end
+    highlights[player] = nil
+end
+
+-- Atualiza todos os jogadores atuais
+local function atualizarTodosJogadores()
+    for _, player in ipairs(game.Players:GetPlayers()) do
+        aplicarESP(player)
     end
 end
+
+-- Eventos para novos jogadores e remoção
+game.Players.PlayerAdded:Connect(function(player)
+    player.CharacterAdded:Connect(function()
+        if espAtivo then
+            task.wait(0.5)
+            aplicarESP(player)
+        end
+    end)
+end)
+
+game.Players.PlayerRemoving:Connect(function(player)
+    removerESP(player)
+end)
+
+-- Loop para manter ESP atualizado em personagens que recarregam
+task.spawn(function()
+    while true do
+        if espAtivo then
+            for _, player in ipairs(game.Players:GetPlayers()) do
+                if player ~= game.Players.LocalPlayer then
+                    aplicarESP(player)
+                end
+            end
+        end
+        task.wait(0.5)
+    end
+end)
+
+-- Toggle no Fluent: Tabs.Main
+Tabs.Main:AddToggle("ESPPlayers", {
+    Title = "ESP Players",
+    Description = "Ativa o contorno azul no corpo dos jogadores!",
+    Default = false,
+    Callback = function(state)
+        espAtivo = state
+        if state then
+            atualizarTodosJogadores()
+            Fluent:Notify({
+                Title = "ESP Players Ativado",
+                Content = "Jogadores estão com contorno azul.",
+                Duration = 4
+            })
+        else
+            -- Remove todos os ESPs
+            for player, _ in pairs(highlights) do
+                removerESP(player)
+            end
+            Fluent:Notify({
+                Title = "ESP Players Desativado",
+                Content = "Todos os contornos foram removidos.",
+                Duration = 4
+            })
+        end
+    end
+})
+
+-- Velocidade Customizável
+local runService = game:GetService("RunService")
+local player = game.Players.LocalPlayer
+local velocidade = 16
+local velocidadeAtiva = false
+local humanoid = nil
+local updateLoop = nil
+local inputBox = nil
+
+-- Pega o Humanoid atual
+local function getHumanoid()
+	local char = player.Character or player.CharacterAdded:Wait()
+	return char:WaitForChild("Humanoid", 5)
+end
+
+-- Aplica velocidade constantemente enquanto ativado
+local function startVelocidadeLoop()
+	if updateLoop then updateLoop:Disconnect() end
+	updateLoop = runService.RenderStepped:Connect(function()
+		if velocidadeAtiva and humanoid then
+			humanoid.WalkSpeed = velocidade
+		end
+	end)
+end
+
+-- Toggle para ativar/desativar
+Tabs.Main:AddToggle("ToggleVelocidade", {
+	Title = "Ativar Velocidade",
+	Description = "Ativa velocidade customizável do jogador!",
+	Default = false,
+	Callback = function(state)
+		velocidadeAtiva = state
+
+		if inputBox and inputBox.Instance then
+			inputBox.Instance.Visible = state
+		end
+
+		if state then
+			humanoid = getHumanoid()
+			startVelocidadeLoop()
+			humanoid.WalkSpeed = velocidade -- Aplica imediatamente
+
+			Fluent:Notify({
+				Title = "Ativado",
+				Content = "Velocidade ativada. Digite sua velocidade desejada.",
+				Duration = 4
+			})
+		else
+			velocidadeAtiva = false
+			velocidade = 16
+			if updateLoop then updateLoop:Disconnect() end
+			if humanoid then
+				humanoid.WalkSpeed = 16
+			end
+
+			Fluent:Notify({
+				Title = "Desativado",
+				Content = "Velocidade resetada para 16.",
+				Duration = 4
+			})
+		end
+	end
+})
+
+-- Input de velocidade
+task.defer(function()
+	inputBox = Tabs.Main:AddInput("VelocidadeInput", {
+		Title = "Velocidade",
+		Description = "Digite sua velocidade (ex: 16, 24, 50...)",
+		Placeholder = "16",
+		Numeric = true,
+		Callback = function(value)
+			local val = tonumber(value)
+			if val and val >= 1 and val <= 100 then
+				velocidade = val
+				if velocidadeAtiva and humanoid then
+					humanoid.WalkSpeed = val -- Aplica imediatamente
+				end
+			else
+				Fluent:Notify({
+					Title = "Valor inválido",
+					Content = "A velocidade deve ser um número entre 1 e 100.",
+					Duration = 3
+				})
+			end
+		end
+	})
+	inputBox.Instance.Visible = false
+end)
+
+-- Variável de controle do Highlight e conexão
+local rakeHighlight = nil
+local rakeChildConnection = nil
+
+-- Função para criar Highlight no Rake
+local function createRakeHighlight(rake)
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "ESPChamHighlight"
+    highlight.FillColor = Color3.fromRGB(255, 0, 0)
+    highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
+    highlight.FillTransparency = 0.4
+    highlight.OutlineTransparency = 0
+    highlight.Adornee = rake
+    highlight.Parent = rake
+    return highlight
+end
+
+-- Botão toggle na GUI Fluent
+Tabs.Main:AddToggle("ESP_Rake", {
+    Title = "ESP do Rake",
+    Description = "Ativa highlight vermelho no Rake",
+    Default = false,
+    Callback = function(state)
+        if state then
+            -- Ativar ESP
+            local rake = workspace:FindFirstChild("Rake") or workspace:FindFirstChild("RDummy")
+            if rake and not rakeHighlight then
+                rakeHighlight = createRakeHighlight(rake)
+            end
+
+            -- Monitorar novos Rakes (caso morra/reapareça)
+            rakeChildConnection = workspace.ChildAdded:Connect(function(child)
+                if (child.Name == "Rake" or child.Name == "RDummy") and not rakeHighlight then
+                    rakeHighlight = createRakeHighlight(child)
+                end
+            end)
+        else
+            -- Desativar ESP
+            if rakeHighlight then
+                rakeHighlight:Destroy()
+                rakeHighlight = nil
+            end
+            if rakeChildConnection then
+                rakeChildConnection:Disconnect()
+                rakeChildConnection = nil
+            end
+        end
+    end
+})
+
+-- Supondo que 'Tabs' e 'Tabs.Main' já existem na sua GUI Fluent
+
+-- Variável para controlar o estado do Fullbright
+local fullbright = false
+
+-- Funções para aplicar e restaurar Fullbright (copiadas do seu script)
+local Lighting = game:GetService("Lighting")
+local Starter = {
+    Brightness = Lighting.Brightness,
+    ClockTime = Lighting.ClockTime,
+    FogEnd = Lighting.FogEnd,
+    GlobalShadows = Lighting.GlobalShadows,
+    Ambient = Lighting.Ambient
+}
+
+local function aplicarFullbright()
+    Lighting.Brightness = 2
+    Lighting.ClockTime = 14
+    Lighting.FogEnd = 100000
+    Lighting.GlobalShadows = false
+    Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+end
+
+local function restaurarIluminacao()
+    for prop, val in pairs(Starter) do
+        Lighting[prop] = val
+    end
+end
+
+-- Criar botão toggle na aba Tabs.Main
+local ToggleFullbright = Tabs.Main:CreateToggle({
+    Name = "Ativar Fullbright",
+    Description = "Ilumina todo o jogo!",
+    CurrentValue = false,
+    Flag = "FullbrightToggle",
+    Callback = function(value)
+        fullbright = value
+        if fullbright then
+            aplicarFullbright()
+        else
+            restaurarIluminacao()
+        end
+    end
+})
